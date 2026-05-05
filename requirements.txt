@@ -1,10 +1,7 @@
-requests
 pandas
+requests
+mcp
+openai
+python-dotenv
+SQLAlchemy
 pymysql
-sqlalchemy
-matplotlib
-black
-scikit-learn
-seaborn
-prophet
-plotly
