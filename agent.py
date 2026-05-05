@@ -1,94 +1,135 @@
 import asyncio
 import json
 import os
+import streamlit as st
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
 from mcp.client.stdio import stdio_client, StdioServerParameters
 from mcp.client.session import ClientSession
 
-# Carrega a chave da API localizada no arquivo .env
+# Configuração inicial da página Streamlit
+st.set_page_config(page_title="Agente IA - Banco Central", page_icon="🏦")
+
+# Carrega as variáveis de ambiente
 load_dotenv()
 
-# Define o modelo 'mini' a ser utilizado pelo Agente
-MODELO = "gpt-4o-mini"
-
-async def main():
-    # Verifica se a chave foi devidamente carregada
-    if not os.getenv("OPENAI_API_KEY"):
-        print("Erro: A variável OPENAI_API_KEY não está configurada no arquivo .env")
-        return
-
-    # Inicializa o cliente assíncrono da OpenAI
-    openai_client = AsyncOpenAI()
-
-    # Configura os parâmetros para o Agente iniciar o seu servidor FastMCP
-    server_params = StdioServerParameters(
-        command="python",
-        args=["mcp_server.py"],
-    )
-
-    print("Iniciando conexão com o servidor MCP...")
+# Configurações na barra lateral
+with st.sidebar:
+    st.header("⚙️ Configurações")
+    modelo_selecionado = st.selectbox("Modelo OpenAI:", ["gpt-4o-mini"])
     
-    # Inicia a comunicação stdio com o servidor MCP local
-    async with stdio_client(server_params) as (read, write):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
-            print("Conectado ao servidor MCP com sucesso!\n")
+    # Verifica e permite inserir a chave da API dinamicamente
+    if not os.getenv("OPENAI_API_KEY"):
+        api_key = st.text_input("OpenAI API Key:", type="password")
+        if api_key:
+            os.environ["OPENAI_API_KEY"] = api_key
+    else:
+        st.success("Chave de API carregada com sucesso!")
 
-            # Puxa automaticamente todas as ferramentas cadastradas no seu mcp_server.py
-            tools_response = await session.list_tools()
-            
-            # Converte as ferramentas do formato MCP para o formato do OpenAI Function Calling
-            openai_tools = []
-            for tool in tools_response.tools:
-                openai_tools.append({
-                    "type": "function",
-                    "function": {
-                        "name": tool.name,
-                        "description": tool.description,
-                        "parameters": tool.inputSchema
-                    }
-                })
+st.title("🏦 Agente de Dados - Banco Central")
+st.write("Faça perguntas naturais sobre movimentações de PIX, TED, Cartões e outros meios de pagamento.")
 
-            # Pergunta base que será enviada para o agente
-            pergunta = "Qual foi o valor total movimentado por PIX e por TED durante todo o ano de 2025?"
-            print(f"Usuário: {pergunta}\n")
-            print("Consultando o modelo OpenAI...")
+# Inicializa o histórico de mensagens da sessão do Streamlit
+if "messages" not in st.session_state:
+    st.session_state.messages = [
+        {
+            "role": "system", 
+            "content": "Você é um analista de dados do Banco Central. Use as ferramentas disponíveis para buscar os dados de pagamentos e responda de forma clara. ATENÇÃO: Os dados de 'valor' estão em Milhões de Reais e os de 'quantidade' em Milhares de unidades. Observção: Caso você saiba responder diga apenas: 123", 
+        }
+    ]
 
-            messages = [
-                {
-                    "role": "system", 
-                    "content": "Você é um analista de dados do Banco Central. Use as ferramentas disponíveis para buscar os dados de pagamentos (seja de um trimestre específico ou o consolidado anual) e responda de forma clara comparando os números."
-                },
-                {"role": "user", "content": pergunta}
-            ]
+# Renderiza o histórico do chat
+for msg in st.session_state.messages:
+    if msg["role"] == "user":
+        with st.chat_message("user"):
+            st.markdown(msg["content"])
+    elif msg["role"] == "assistant" and msg.get("content"):
+        with st.chat_message("assistant"):
+            st.markdown(msg["content"])
 
-            # 1º Passo: Manda o prompt para a OpenAI avaliar se precisa chamar alguma ferramenta
-            response = await openai_client.chat.completions.create(
-                model=MODELO,
-                messages=messages,
-                tools=openai_tools
-            )
+async def query_agent(prompt, model):
+    # Adiciona e exibe a pergunta do usuário
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
 
-            message = response.choices[0].message
-            messages.append(message)
+    with st.chat_message("assistant"):
+        status_box = st.empty()
+        status_box.info("🔌 Conectando ao servidor MCP local...")
 
-            # 2º Passo: Se a IA decidir que precisa chamar a ferramenta, executa ela
-            if message.tool_calls:
-                for tool_call in message.tool_calls:
-                    tool_name = tool_call.function.name
-                    tool_args = json.loads(tool_call.function.arguments)
-                    print(f"[Sistema] A IA solicitou a ferramenta '{tool_name}' usando os parâmetros: {tool_args}...")
+        openai_client = AsyncOpenAI()
+        server_params = StdioServerParameters(command="python", args=["mcp_server.py"])
+
+        try:
+            async with stdio_client(server_params) as (read, write):
+                async with ClientSession(read, write) as session:
+                    await session.initialize()
                     
-                    # Aciona a sua função Python através da ponte do MCP
-                    result = await session.call_tool(tool_name, tool_args)
-                    tool_result_text = result.content[0].text if result.content else "{}"
+                    status_box.info("🛠️ Obtendo ferramentas do BCB...")
+                    tools_response = await session.list_tools()
                     
-                    messages.append({"role": "tool", "tool_call_id": tool_call.id, "content": tool_result_text})
+                    openai_tools = [
+                        {
+                            "type": "function",
+                            "function": {
+                                "name": tool.name,
+                                "description": tool.description,
+                                "parameters": tool.inputSchema
+                            }
+                        }
+                        for tool in tools_response.tools
+                    ]
 
-                print("[Sistema] Dados extraídos da API com sucesso! Gerando resposta final...\n")
-                final_response = await openai_client.chat.completions.create(model=MODELO, messages=messages)
-                print("Resposta da IA:\n" + final_response.choices[0].message.content)
+                    status_box.info(f"🧠 Consultando o modelo ({model})...")
+                    
+                    response = await openai_client.chat.completions.create(
+                        model=model,
+                        messages=st.session_state.messages,
+                        tools=openai_tools
+                    )
 
-if __name__ == "__main__":
-    asyncio.run(main())
+                    message = response.choices[0].message
+                    # Salva a mensagem no estado como dicionário para compatibilidade
+                    st.session_state.messages.append(message.model_dump(exclude_none=True))
+
+                    # Verifica se a IA solicitou chamar ferramentas
+                    if message.tool_calls:
+                        for tool_call in message.tool_calls:
+                            tool_name = tool_call.function.name
+                            tool_args = json.loads(tool_call.function.arguments)
+                            status_box.warning(f"⚙️ Executando a ferramenta: `{tool_name}`...")
+                            
+                            result = await session.call_tool(tool_name, tool_args)
+                            tool_result_text = result.content[0].text if result.content else "{}"
+                            
+                            st.session_state.messages.append({
+                                "role": "tool",
+                                "tool_call_id": tool_call.id,
+                                "name": tool_name,
+                                "content": tool_result_text
+                            })
+
+                        status_box.info("✅ Dados recebidos! Gerando resposta final...")
+                        
+                        final_response = await openai_client.chat.completions.create(
+                            model=model,
+                            messages=st.session_state.messages
+                        )
+                        
+                        final_text = final_response.choices[0].message.content
+                        st.session_state.messages.append({"role": "assistant", "content": final_text})
+                        status_box.empty()
+                        st.markdown(final_text)
+                    else:
+                        final_text = message.content
+                        status_box.empty()
+                        st.markdown(final_text)
+        except Exception as e:
+            status_box.error(f"Erro durante a execução: {str(e)}")
+
+# Campo de entrada de texto interativo no rodapé
+if prompt := st.chat_input("Qual foi o valor movimentado por PIX e TED em 2023?"):
+    if not os.getenv("OPENAI_API_KEY"):
+        st.error("⚠️ Insira a chave da API da OpenAI na barra lateral para continuar.")
+    else:
+        asyncio.run(query_agent(prompt, modelo_selecionado))

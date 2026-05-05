@@ -10,7 +10,7 @@ Este projeto realiza a Extração, Transformação e Carga (ETL) dos dados abert
 - **Servidor MCP (`mcp_server.py`):** Expõe as funções de dados como ferramentas (tools) para serem consumidas por LLMs (Large Language Models).
   - `obter_meios_pagamento_bcb(trimestre)`: Retorna os dados de um trimestre específico.
   - `resumo_anual_meios_pagamento(ano)`: Retorna o consolidado (soma) de um ano inteiro.
-- **Agente IA (`agent.py`):** Um script interativo que utiliza a API da OpenAI juntamente com o cliente MCP para interpretar perguntas do usuário, invocar as ferramentas locais de dados e formular uma resposta contextualizada baseada em dados reais.
+- **Agente IA (`agent.py`):** Uma aplicação web (Streamlit) interativa que utiliza a API da OpenAI juntamente com o cliente MCP para interpretar perguntas do usuário, invocar as ferramentas locais de dados e formular uma resposta contextualizada baseada em dados reais.
 
 ## 📋 Pré-requisitos
 
@@ -57,9 +57,9 @@ python mcp_server.py
 ```
 
 ### 3. Consultando o Agente IA
-Para realizar perguntas diretas à IA, que vai de forma autônoma buscar os dados do Banco Central no servidor local para responder:
+Para abrir a interface gráfica do Agente IA e interagir diretamente pelo navegador:
 ```bash
-python agent.py
+streamlit run agent.py
 ```
 *(No código atual, o agente pergunta sobre o volume movimentado por PIX e TED no 1º trimestre de 2023, mas a pergunta pode ser alterada diretamente no arquivo `agent.py`).*
 
