@@ -4,8 +4,6 @@ import json
 import pandas as pd
 
 
-instruction = 'Você é um analista de dados do Banco Central. Use as ferramentas disponíveis para buscar os dados de pagamentos e responda de forma clara. Não invente valores. Caso você saiba responder diga apenas: 123'
-
 # Inicializa o servidor FastMCP
 mcp = FastMCP("BCB_MeiosPagamento")
 
@@ -13,35 +11,14 @@ mcp = FastMCP("BCB_MeiosPagamento")
 @mcp.tool()
 def obter_meios_pagamento_bcb(trimestre: str) -> str:
     """
-    Obtém os dados da série de meios de pagamento do Banco Central do Brasil (BCB) 
-    para um trimestre específico. Ferramenta útil para consultar valores e quantidades 
-    de transações por PIX, TED, DOC, Cheques, Cartões, etc.
+    Busca os dados de transações (PIX, TED, Cartões, etc.) do Banco Central para um ÚNICO TRIMESTRE.
+    Use esta ferramenta APENAS quando a pergunta for especificamente sobre um trimestre.
     
-    ATENÇÃO: Use esta ferramenta sempre que o usuário fornecer um período no formato 
-    AAAAT de 5 dígitos (ex: "20251", que significa 1º trimestre de 2025).
-    
-    IMPORTANTE SOBRE UNIDADES DE MEDIDA:
-    - Os campos que começam com "valor" (ex: valorPix, valorTED) estão na escala de MILHÕES de Reais (R$ milhões).
-    - Os campos que começam com "quantidade" (ex: quantidadePix) estão na escala de MILHARES de unidades.
-
-    A resposta retorna um JSON contendo os seguintes campos numéricos:
-    - datatrimestre (string)
-    - valorPix, quantidadePix
-    - valorTED, quantidadeTED
-    - valorTEC, quantidadeTEC
-    - valorCheque, quantidadeCheque
-    - valorBoleto, quantidadeBoleto
-    - valorDOC, quantidadeDOC
-    - valorCartaoCredito, quantidadeCartaoCredito
-    - valorCartaoDebito, quantidadeCartaoDebito
-    - valorCartaoPrePago, quantidadeCartaoPrePago
-    - valorTransIntrabancaria, quantidadeTransIntrabancaria
-    - valorConvenios, quantidadeConvenios
-    - valorDebitoDireto, quantidadeDebitoDireto
-    - valorSaques, quantidadeSaques
+    Retorna um JSON contendo 'valor' (em Milhões de R$) e 'quantidade' (em Milhares de unidades) para os meios:
+    Pix, TED, TEC, Cheque, Boleto, DOC, CartaoCredito, CartaoDebito, CartaoPrePago, TransIntrabancaria, Convenios, DebitoDireto e Saques.
 
     Args:
-        trimestre: String no formato AAAAT (Exemplo: "20191" para o 1º trimestre de 2019, ou "20251" para 1º trimestre de 2025).
+        trimestre: String de 5 dígitos no formato AAAAT (Ex: "20231" para o 1º trimestre de 2023).
     """
     try:
         df = requestApiBcb(trimestre)
@@ -57,35 +34,14 @@ def obter_meios_pagamento_bcb(trimestre: str) -> str:
 @mcp.tool()
 def resumo_anual_meios_pagamento(ano: str) -> str:
     """
-    Obtém o resumo consolidado (soma) dos dados de meios de pagamento do Banco Central 
-    para todos os quatro trimestres de um determinado ano.
+    Busca o total consolidado de transações (PIX, TED, Cartões, etc.) do Banco Central para um ANO COMPLETO.
+    Use esta ferramenta APENAS quando a pergunta for sobre o fechamento de um ano inteiro.
     
-    ATENÇÃO: Use APENAS quando o usuário pedir os dados de um ano inteiro fechado (ex: "2023"). 
-    Se o usuário fornecer um código de 5 dígitos como "20251", isso representa um 
-    trimestre específico, e você DEVE usar a ferramenta 'obter_meios_pagamento_bcb' 
-    em vez desta.
-    
-    IMPORTANTE SOBRE UNIDADES DE MEDIDA:
-    - Os campos que começam com "valor" (ex: valorPix, valorTED) estão na escala de MILHÕES de Reais (R$ milhões).
-    - Os campos que começam com "quantidade" (ex: quantidadePix) estão na escala de MILHARES de unidades.
-
-    A resposta retorna um JSON contendo a soma anual dos seguintes campos numéricos:
-    - valorPix, quantidadePix
-    - valorTED, quantidadeTED
-    - valorTEC, quantidadeTEC
-    - valorCheque, quantidadeCheque
-    - valorBoleto, quantidadeBoleto
-    - valorDOC, quantidadeDOC
-    - valorCartaoCredito, quantidadeCartaoCredito
-    - valorCartaoDebito, quantidadeCartaoDebito
-    - valorCartaoPrePago, quantidadeCartaoPrePago
-    - valorTransIntrabancaria, quantidadeTransIntrabancaria
-    - valorConvenios, quantidadeConvenios
-    - valorDebitoDireto, quantidadeDebitoDireto
-    - valorSaques, quantidadeSaques
+    Retorna um JSON contendo a soma anual de 'valor' (em Milhões de R$) e 'quantidade' (em Milhares de unidades) para os meios:
+    Pix, TED, TEC, Cheque, Boleto, DOC, CartaoCredito, CartaoDebito, CartaoPrePago, TransIntrabancaria, Convenios, DebitoDireto e Saques.
 
     Args:
-        ano: String contendo EXATAMENTE 4 dígitos do ano (Exemplo: "2023"). Não envie códigos com 5 dígitos (como 20251) neste campo.
+        ano: String de 4 dígitos representando o ano (Ex: "2023").
     """
     try:
         # Como a API retorna tudo a partir da data informada, fazemos apenas 1 requisição para o 1º trimestre do ano

@@ -34,7 +34,9 @@ if "messages" not in st.session_state:
     st.session_state.messages = [
         {
             "role": "system", 
-            "content": "Você é um analista de dados do Banco Central. Use as ferramentas disponíveis para buscar os dados de pagamentos e responda de forma clara. ATENÇÃO: Os dados de 'valor' estão em Milhões de Reais e os de 'quantidade' em Milhares de unidades. Observção: Caso você saiba responder diga apenas: 123", 
+            "content": "Você é um analista de dados do Banco Central. Use as ferramentas disponíveis para buscar os dados. "
+            "REGRA MATEMÁTICA OBRIGATÓRIA: Os dados de 'valor' retornados pelas ferramentas estão em MILHÕES de Reais. Para apresentar em TRILHÕES de Reais, você DEVE dividir o valor numérico bruto por 1.000.000 (Ex: '10220000' / 1000000 = R$ 10,22 Trilhões). "
+            "Se o resultado for menor que 1 Trilhão, converta para Bilhões dividindo o número bruto por 1.000 (Ex: '2590000' / 1000 = R$ 2,59 Bilhões). Os dados de 'quantidade' estão em Milhares de unidades."
         }
     ]
 
