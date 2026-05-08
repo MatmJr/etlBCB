@@ -7,6 +7,29 @@ import pandas as pd
 # Inicializa o servidor FastMCP
 mcp = FastMCP("BCB_MeiosPagamento")
 
+def formatar_grandeza(valor, is_monetario=False):
+    if pd.isna(valor):
+        return valor
+    try:
+        valor = float(valor)
+    except ValueError:
+        return valor
+        
+    prefixo = "R$ " if is_monetario else ""
+    
+    if valor >= 1_000_000_000_000:
+        texto = f"{prefixo}{valor/1_000_000_000_000:.2f} Trilhões"
+    elif valor >= 1_000_000_000:
+        texto = f"{prefixo}{valor/1_000_000_000:.2f} Bilhões"
+    elif valor >= 1_000_000:
+        texto = f"{prefixo}{valor/1_000_000:.2f} Milhões"
+    elif valor >= 1_000:
+        texto = f"{prefixo}{valor/1_000:.2f} Mil"
+    else:
+        texto = f"{prefixo}{valor:.2f}"
+        
+    return texto.replace('.', ',')
+
 
 @mcp.tool()
 def obter_meios_pagamento_bcb(trimestre: str) -> str:
@@ -14,7 +37,7 @@ def obter_meios_pagamento_bcb(trimestre: str) -> str:
     Busca os dados de transações (PIX, TED, Cartões, etc.) do Banco Central para um ÚNICO TRIMESTRE.
     Use esta ferramenta APENAS quando a pergunta for especificamente sobre um trimestre.
     
-    Retorna um JSON contendo 'valor' (em Milhões de R$) e 'quantidade' (em Milhares de unidades) para os meios:
+    Retorna um JSON contendo 'valor' e 'quantidade' já formatados em texto (Ex: 'R$ 35,20 Trilhões', '15,40 Bilhões') para os meios:
     Pix, TED, TEC, Cheque, Boleto, DOC, CartaoCredito, CartaoDebito, CartaoPrePago, TransIntrabancaria, Convenios, DebitoDireto e Saques.
 
     Args:
@@ -26,7 +49,16 @@ def obter_meios_pagamento_bcb(trimestre: str) -> str:
             return json.dumps({"erro": f"Nenhum dado publicado no Banco Central para o trimestre {trimestre}."})
             
         # A API retorna a série histórica a partir da data. Pegamos apenas a 1ª linha (o trimestre solicitado)
-        df = df.head(1)
+        df = df.tail(1).copy()
+        
+        for col in df.columns:
+            if "valor" in col.lower():
+                df[col] = pd.to_numeric(df[col], errors="coerce") * 1_000_000
+                df[col] = df[col].apply(lambda x: formatar_grandeza(x, is_monetario=True))
+            elif "quantidade" in col.lower():
+                df[col] = pd.to_numeric(df[col], errors="coerce") * 1_000
+                df[col] = df[col].apply(lambda x: formatar_grandeza(x, is_monetario=False))
+                
         return df.to_json(orient="records", date_format="iso")
     except Exception as e:
         return json.dumps({"erro": f"Falha ao buscar dados do BCB: {str(e)}"})
@@ -37,7 +69,7 @@ def resumo_anual_meios_pagamento(ano: str) -> str:
     Busca o total consolidado de transações (PIX, TED, Cartões, etc.) do Banco Central para um ANO COMPLETO.
     Use esta ferramenta APENAS quando a pergunta for sobre o fechamento de um ano inteiro.
     
-    Retorna um JSON contendo a soma anual de 'valor' (em Milhões de R$) e 'quantidade' (em Milhares de unidades) para os meios:
+    Retorna um JSON contendo a soma anual de 'valor' e 'quantidade' já formatados em texto (Ex: 'R$ 35,20 Trilhões', '15,40 Bilhões') para os meios:
     Pix, TED, TEC, Cheque, Boleto, DOC, CartaoCredito, CartaoDebito, CartaoPrePago, TransIntrabancaria, Convenios, DebitoDireto e Saques.
 
     Args:
@@ -65,6 +97,14 @@ def resumo_anual_meios_pagamento(ano: str) -> str:
         # Soma apenas os valores numéricos, criando uma única linha de totais
         df_resumo = df_ano.select_dtypes(include='number').sum().to_frame().T
         df_resumo["ano"] = ano
+        
+        for col in df_resumo.columns:
+            if "valor" in col.lower():
+                df_resumo[col] = df_resumo[col] * 1_000_000
+                df_resumo[col] = df_resumo[col].apply(lambda x: formatar_grandeza(x, is_monetario=True))
+            elif "quantidade" in col.lower():
+                df_resumo[col] = df_resumo[col] * 1_000
+                df_resumo[col] = df_resumo[col].apply(lambda x: formatar_grandeza(x, is_monetario=False))
         
         return df_resumo.to_json(orient="records")
     except Exception as e:

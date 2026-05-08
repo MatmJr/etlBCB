@@ -35,19 +35,29 @@ if "messages" not in st.session_state:
         {
             "role": "system", 
             "content": "Você é um analista de dados do Banco Central. Use as ferramentas disponíveis para buscar os dados. "
-            "REGRA MATEMÁTICA OBRIGATÓRIA: Os dados de 'valor' retornados pelas ferramentas estão em MILHÕES de Reais. Para apresentar em TRILHÕES de Reais, você DEVE dividir o valor numérico bruto por 1.000.000 (Ex: '10220000' / 1000000 = R$ 10,22 Trilhões). "
-            "Se o resultado for menor que 1 Trilhão, converta para Bilhões dividindo o número bruto por 1.000 (Ex: '2590000' / 1000 = R$ 2,59 Bilhões). Os dados de 'quantidade' estão em Milhares de unidades."
+            "Os dados retornados pelas ferramentas já estão formatados em texto e prontos para exibição (Ex: 'R$ 17,10 Trilhões'). "
+            "Apenas repasse os valores exatos retornados pelas ferramentas de forma amigável e legível para o usuário sem modificar a sua grandeza."
         }
     ]
 
 # Renderiza o histórico do chat
+pending_tools = []
 for msg in st.session_state.messages:
     if msg["role"] == "user":
         with st.chat_message("user"):
             st.markdown(msg["content"])
+    elif msg["role"] == "tool":
+        pending_tools.append(msg)
     elif msg["role"] == "assistant" and msg.get("content"):
         with st.chat_message("assistant"):
             st.markdown(msg["content"])
+            for t_msg in pending_tools:
+                with st.expander(f"📄 Fonte de Dados: {t_msg.get('name', 'Ferramenta')}"):
+                    try:
+                        st.json(json.loads(t_msg["content"]))
+                    except (json.JSONDecodeError, TypeError):
+                        st.text(t_msg["content"])
+            pending_tools = []
 
 async def query_agent(prompt, model):
     # Adiciona e exibe a pergunta do usuário
@@ -96,6 +106,7 @@ async def query_agent(prompt, model):
 
                     # Verifica se a IA solicitou chamar ferramentas
                     if message.tool_calls:
+                        executed_tools = []
                         for tool_call in message.tool_calls:
                             tool_name = tool_call.function.name
                             tool_args = json.loads(tool_call.function.arguments)
@@ -104,12 +115,14 @@ async def query_agent(prompt, model):
                             result = await session.call_tool(tool_name, tool_args)
                             tool_result_text = result.content[0].text if result.content else "{}"
                             
-                            st.session_state.messages.append({
+                            t_msg = {
                                 "role": "tool",
                                 "tool_call_id": tool_call.id,
                                 "name": tool_name,
                                 "content": tool_result_text
-                            })
+                            }
+                            st.session_state.messages.append(t_msg)
+                            executed_tools.append(t_msg)
 
                         status_box.info("✅ Dados recebidos! Gerando resposta final...")
                         
@@ -122,6 +135,13 @@ async def query_agent(prompt, model):
                         st.session_state.messages.append({"role": "assistant", "content": final_text})
                         status_box.empty()
                         st.markdown(final_text)
+                        
+                        for t_msg in executed_tools:
+                            with st.expander(f"📄 Fonte de Dados: {t_msg.get('name', 'Ferramenta')}"):
+                                try:
+                                    st.json(json.loads(t_msg["content"]))
+                                except (json.JSONDecodeError, TypeError):
+                                    st.text(t_msg["content"])
                     else:
                         final_text = message.content
                         status_box.empty()
